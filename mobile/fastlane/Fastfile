@@ -1,0 +1,229 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# GUARDIAN – Fastlane Configuration
+# ══════════════════════════════════════════════════════════════════════════════
+# Automatise le build, la signature et le déploiement sur Google Play.
+#
+# Installation:
+#   gem install fastlane
+#   cd mobile-parent && fastlane init
+#
+# Usage:
+#   fastlane deploy_internal   → Déploie en piste interne (test)
+#   fastlane deploy_production → Déploie en production
+#   fastlane screenshot        → Génère les screenshots automatiquement
+#   fastlane bump_version      → Incrémente la version
+
+# Gemfile
+# source "https://rubygems.org"
+# gem "fastlane"
+# gem "supply"
+
+default_platform(:android)
+
+platform :android do
+
+  # ── VARIABLES ────────────────────────────────────────────────────────────────
+  PARENT_PACKAGE  = "com.guardian.parent"
+  CHILD_PACKAGE   = "com.guardian.child"
+  PLAY_KEY_FILE   = "fastlane/play-store-key.json"
+
+  # ── AVANT TOUTE ACTION ───────────────────────────────────────────────────────
+  before_all do
+    ensure_git_status_clean
+  end
+
+  # ── BUMP VERSION ─────────────────────────────────────────────────────────────
+  desc "Incrémente le versionCode automatiquement"
+  lane :bump_version do
+    # Lit le versionCode actuel
+    current = android_get_version_code(
+      gradle_file: "mobile-parent/android/app/build.gradle"
+    )
+    new_code = current.to_i + 1
+
+    android_set_version_code(
+      version_code: new_code,
+      gradle_file:  "mobile-parent/android/app/build.gradle"
+    )
+    android_set_version_code(
+      version_code: new_code,
+      gradle_file:  "mobile-child/android/app/build.gradle"
+    )
+
+    UI.success "Version code bumped to #{new_code}"
+    new_code
+  end
+
+  # ── BUILD PARENT AAB ─────────────────────────────────────────────────────────
+  desc "Build l'app parent en mode release (AAB)"
+  lane :build_parent do
+    gradle(
+      task:        "bundle",
+      build_type:  "Release",
+      project_dir: "mobile-parent/android",
+      properties: {
+        "android.injected.signing.store.file"     => ENV["KEYSTORE_PATH"],
+        "android.injected.signing.store.password" => ENV["KEYSTORE_PASSWORD"],
+        "android.injected.signing.key.alias"      => ENV["KEY_ALIAS"],
+        "android.injected.signing.key.password"   => ENV["KEY_PASSWORD"],
+      }
+    )
+    UI.success "Parent AAB built: #{lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH]}"
+  end
+
+  # ── BUILD CHILD APK ──────────────────────────────────────────────────────────
+  desc "Build l'app enfant en mode release (APK)"
+  lane :build_child do
+    gradle(
+      task:        "assemble",
+      build_type:  "Release",
+      project_dir: "mobile-child/android",
+      properties: {
+        "android.injected.signing.store.file"     => ENV["KEYSTORE_PATH"],
+        "android.injected.signing.store.password" => ENV["KEYSTORE_PASSWORD"],
+        "android.injected.signing.key.alias"      => ENV["KEY_ALIAS"],
+        "android.injected.signing.key.password"   => ENV["KEY_PASSWORD"],
+      }
+    )
+    UI.success "Child APK built: #{lane_context[SharedValues::GRADLE_APK_OUTPUT_PATH]}"
+  end
+
+  # ── TESTS ────────────────────────────────────────────────────────────────────
+  desc "Lance les tests Jest + E2E Detox"
+  lane :test do
+    # Tests unitaires backend
+    sh "cd backend && npm test -- --coverage --forceExit --ci"
+
+    # Tests E2E Detox (app parent)
+    sh "cd mobile-parent && npx detox build --configuration android.emu.debug"
+    sh "cd mobile-parent && npx detox test --configuration android.emu.debug --ci"
+
+    UI.success "All tests passed!"
+  end
+
+  # ── DEPLOY INTERNAL ──────────────────────────────────────────────────────────
+  desc "Build et déploie sur la piste interne Google Play"
+  lane :deploy_internal do
+    bump_version
+    build_parent
+
+    upload_to_play_store(
+      track:        "internal",
+      aab:          lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH],
+      package_name: PARENT_PACKAGE,
+      json_key:     PLAY_KEY_FILE,
+      skip_upload_metadata: false,
+      skip_upload_images:   false,
+      skip_upload_screenshots: false,
+      metadata_path: "fastlane/metadata/android/fr-FR",
+      release_status: "completed",
+    )
+
+    # Notifie l'équipe
+    slack(
+      message:       "🚀 Guardian Parent App déployée en piste interne !",
+      channel:       "#releases",
+      slack_url:     ENV["SLACK_WEBHOOK_URL"],
+      default_payloads: [:git_branch, :git_author],
+    ) if ENV["SLACK_WEBHOOK_URL"]
+
+    UI.success "Deployed to internal track!"
+  end
+
+  # ── DEPLOY PRODUCTION ────────────────────────────────────────────────────────
+  desc "Déploie en production (piste production Google Play)"
+  lane :deploy_production do
+    # Vérification obligatoire
+    UI.important "Déploiement en PRODUCTION. Êtes-vous sûr ?"
+    UI.confirm "Confirmer le déploiement production ?"
+
+    build_parent
+
+    upload_to_play_store(
+      track:        "production",
+      rollout:      "0.1",  # Déploiement progressif : 10% des utilisateurs
+      aab:          lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH],
+      package_name: PARENT_PACKAGE,
+      json_key:     PLAY_KEY_FILE,
+    )
+
+    # Tag git
+    add_git_tag(
+      tag:     "v#{android_get_version_name(gradle_file: 'mobile-parent/android/app/build.gradle')}",
+      message: "Production release"
+    )
+    push_git_tags
+
+    slack(
+      message: "🎉 Guardian v#{android_get_version_name(gradle_file: 'mobile-parent/android/app/build.gradle')} en production (rollout 10%) !",
+      channel: "#releases",
+      slack_url: ENV["SLACK_WEBHOOK_URL"],
+    ) if ENV["SLACK_WEBHOOK_URL"]
+  end
+
+  # ── EXPAND ROLLOUT ───────────────────────────────────────────────────────────
+  desc "Étend le rollout progressif (10% → 50% → 100%)"
+  lane :expand_rollout do |options|
+    rollout = options[:percentage] || "0.5"
+    upload_to_play_store(
+      track:       "production",
+      rollout:     rollout.to_s,
+      package_name: PARENT_PACKAGE,
+      json_key:    PLAY_KEY_FILE,
+      skip_upload_changelogs: true,
+      skip_upload_metadata:   true,
+      skip_upload_images:     true,
+      skip_upload_screenshots: true,
+    )
+    UI.success "Rollout expanded to #{(rollout.to_f * 100).to_i}%"
+  end
+
+  # ── SCREENSHOTS ──────────────────────────────────────────────────────────────
+  desc "Génère les screenshots automatiquement avec Screengrab"
+  lane :screenshots do
+    screengrab(
+      output_directory:       "fastlane/screenshots",
+      clear_previous_screenshots: true,
+      locales:                ["fr-FR", "en-US", "es-ES"],
+      tests_package_name:     "com.guardian.parent.test",
+      app_package_name:       PARENT_PACKAGE,
+    )
+    upload_to_play_store(
+      skip_upload_apk:        true,
+      skip_upload_aab:        true,
+      skip_upload_metadata:   true,
+      skip_upload_changelogs: true,
+      package_name:           PARENT_PACKAGE,
+      json_key:               PLAY_KEY_FILE,
+    )
+  end
+
+  # ── CHANGELOG ────────────────────────────────────────────────────────────────
+  desc "Génère le changelog depuis les commits Git"
+  lane :generate_changelog do
+    changelog = changelog_from_git_commits(
+      between:       ["HEAD~10", "HEAD"],
+      pretty:        "• %s",
+      merge_commit_filtering: "exclude_merges"
+    )
+
+    # Écrit dans les fichiers de métadonnées Play Store
+    ["fr-FR", "en-US"].each do |locale|
+      path = "fastlane/metadata/android/#{locale}/changelogs/default.txt"
+      File.write(path, changelog[0..499]) # Max 500 chars
+    end
+
+    UI.success "Changelog generated:\n#{changelog}"
+  end
+
+  # ── GESTION D'ERREUR ─────────────────────────────────────────────────────────
+  error do |lane, exception|
+    slack(
+      message: "❌ Fastlane erreur dans #{lane}: #{exception.message}",
+      channel: "#alerts",
+      slack_url: ENV["SLACK_WEBHOOK_URL"],
+      success: false,
+    ) if ENV["SLACK_WEBHOOK_URL"]
+  end
+
+end

@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GUARDIAN – Overlay de blocage
+  ================================
+  Affiché PAR-DESSUS toute application bloquée via l'Accessibility Service.
+  TYPE_ACCESSIBILITY_OVERLAY garantit qu'il s'affiche au-dessus de tout,
+  même du launcher Android.
+  L'enfant ne peut PAS fermer cet overlay — seul le bouton "Guardian" permet
+  de naviguer vers l'app Guardian pour voir les explications de l'IA.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#F0000000"
+    android:padding="32dp">
+
+    <!-- Icône de blocage animée -->
+    <ImageView
+        android:id="@+id/block_icon"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:src="@drawable/ic_guardian_shield"
+        android:layout_marginBottom="24dp"/>
+
+    <!-- Titre -->
+    <TextView
+        android:id="@+id/block_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🛡️ Guardian"
+        android:textColor="#FFFFFF"
+        android:textSize="28sp"
+        android:fontFamily="sans-serif-black"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Message principal (dynamique via code) -->
+    <TextView
+        android:id="@+id/block_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="L'accès à cette application est limité."
+        android:textColor="#BBBBBB"
+        android:textSize="16sp"
+        android:lineSpacingExtra="6dp"
+        android:gravity="center"
+        android:layout_marginBottom="40dp"
+        android:paddingHorizontal="20dp"/>
+
+    <!-- Temps restant (affiché si quota épuisé) -->
+    <LinearLayout
+        android:id="@+id/quota_info"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_badge_dark"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="10dp"
+        android:layout_marginBottom="32dp"
+        android:gravity="center_vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/quota_icon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⏰"
+            android:textSize="18sp"
+            android:layout_marginEnd="8dp"/>
+
+        <TextView
+            android:id="@+id/quota_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFD93D"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"/>
+    </LinearLayout>
+
+    <!-- Bouton principal : Parler à Guardian -->
+    <Button
+        android:id="@+id/btn_open_guardian"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="🛡️ Parler à Guardian"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:fontFamily="sans-serif-black"
+        android:background="@drawable/bg_btn_gradient_purple"
+        android:layout_marginBottom="16dp"
+        android:maxLines="1"/>
+
+    <!-- Texte d'aide -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Guardian peut t'expliquer pourquoi et t'aider à gagner du temps bonus ! 💪"
+        android:textColor="#666666"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:lineSpacingExtra="4dp"
+        android:paddingHorizontal="20dp"/>
+
+</LinearLayout>

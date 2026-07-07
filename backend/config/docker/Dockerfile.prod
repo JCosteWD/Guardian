@@ -1,0 +1,60 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# GUARDIAN – Dockerfile Backend (multi-stage, production-hardened)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── STAGE 1: Dependencies ─────────────────────────────────────────────────────
+FROM node:20-alpine AS deps
+WORKDIR /app
+
+# Dépendances système pour bcrypt, pg natif, etc.
+RUN apk add --no-cache python3 make g++ \
+    && rm -rf /var/cache/apk/*
+
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# ── STAGE 2: Build (si TypeScript/transpilation nécessaire) ──────────────────
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+# RUN npm run build  # Décommenter si build étape nécessaire
+
+# ── STAGE 3: Production ───────────────────────────────────────────────────────
+FROM node:20-alpine AS production
+WORKDIR /app
+
+# Crée un utilisateur non-root
+RUN addgroup -g 1001 -S guardian && \
+    adduser -S guardian -u 1001 -G guardian
+
+# Copie uniquement les dépendances de production
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copie le code source (et les extensions backend-extra, profile, etc.)
+COPY --chown=guardian:guardian src/ ./src/
+COPY --chown=guardian:guardian package*.json ./
+
+# Si backend-extra etc. sont à la racine du repo (un niveau au-dessus de backend/)
+# Le contexte de build doit inclure ces dossiers — voir docker-compose.prod.yml
+# context: . (racine du repo) au lieu de ./backend
+
+# Variables d'environnement par défaut (non sensibles)
+ENV NODE_ENV=production \
+    PORT=3000 \
+    NODE_OPTIONS="--max-old-space-size=768"
+
+# Healthcheck intégré
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+
+USER guardian
+
+EXPOSE 3000
+
+# dumb-init pour gérer correctement SIGTERM (graceful shutdown)
+RUN apk add --no-cache dumb-init
+ENTRYPOINT ["dumb-init", "--"]
+
+CMD ["node", "src/server.js"]

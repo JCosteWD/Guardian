@@ -1,0 +1,336 @@
+name: Guardian CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+# ══════════════════════════════════════════════════════════════════════════════
+jobs:
+
+  # ── 1. TESTS BACKEND ────────────────────────────────────────────────────────
+  test-backend:
+    name: 🧪 Backend Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: guardian_test
+          POSTGRES_USER: guardian_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: 📦 Install dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: 🗄️ Run migrations
+        working-directory: ./backend
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: guardian_test
+          DB_USER: guardian_user
+          DB_PASSWORD: test_password
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: test_jwt_secret_minimum_64_chars_long_for_testing_purposes_only
+          JWT_REFRESH_SECRET: test_refresh_secret_also_64_chars_long_for_testing_purposes
+          ANTHROPIC_API_KEY: test_key
+          STRIPE_SECRET_KEY: sk_test_fake
+        run: node src/config/migrate.js
+
+      - name: 🧪 Run tests
+        working-directory: ./backend
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: guardian_test
+          DB_USER: guardian_user
+          DB_PASSWORD: test_password
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: test_jwt_secret_minimum_64_chars_long_for_testing_purposes_only
+          JWT_REFRESH_SECRET: test_refresh_secret_also_64_chars_long_for_testing_purposes
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_TEST }}
+          STRIPE_SECRET_KEY: sk_test_fake
+        run: npm test -- --coverage --forceExit
+
+      - name: 📊 Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./backend/coverage
+          flags: backend
+
+  # ── 2. LINT & TYPE CHECK ────────────────────────────────────────────────────
+  lint:
+    name: 🔍 Lint & Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Backend lint
+        working-directory: ./backend
+        run: |
+          npm ci
+          npx eslint src/ --ext .js --max-warnings 0 || true
+
+      - name: Web parent lint
+        working-directory: ./web-parent
+        run: |
+          npm ci
+          npm run lint || true
+
+  # ── 3. BUILD WEB PARENT ─────────────────────────────────────────────────────
+  build-web:
+    name: 🏗️ Build Web Dashboard
+    runs-on: ubuntu-latest
+    needs: [test-backend, lint]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install & Build
+        working-directory: ./web-parent
+        env:
+          VITE_API_URL: ${{ github.ref == 'refs/heads/main' && 'https://api.guardian-app.com/api' || 'https://api.staging.guardian-app.com/api' }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web-parent/dist/
+          retention-days: 7
+
+  # ── 4. BUILD DOCKER API ─────────────────────────────────────────────────────
+  build-docker-api:
+    name: 🐳 Build API Docker Image
+    runs-on: ubuntu-latest
+    needs: [test-backend]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 5. BUILD APK ANDROID ────────────────────────────────────────────────────
+  build-android:
+    name: 📱 Build Android APK
+    runs-on: ubuntu-latest
+    needs: [lint]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies (child app)
+        working-directory: ./mobile-child
+        run: npm ci
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Create keystore from secret
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > mobile-child/android/app/guardian-release.keystore
+
+      - name: Build Release APK (child)
+        working-directory: ./mobile-child/android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Install dependencies (parent app)
+        working-directory: ./mobile-parent
+        run: npm ci
+
+      - name: Build Release APK (parent)
+        working-directory: ./mobile-parent/android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardian-apks
+          path: |
+            mobile-child/android/app/build/outputs/apk/release/*.apk
+            mobile-parent/android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+  # ── 6. DEPLOY PRODUCTION ────────────────────────────────────────────────────
+  deploy-production:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-docker-api, build-web]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://guardian-app.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download web build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web-parent/dist/
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_SERVER_HOST }}
+          username: ${{ secrets.PROD_SERVER_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /opt/guardian
+
+            # Pull latest images
+            docker compose pull api
+
+            # Run migration
+            docker compose run --rm migrate
+
+            # Rolling restart (zero downtime)
+            docker compose up -d --no-deps api
+            docker compose up -d --no-deps nginx
+
+            # Health check
+            sleep 10
+            curl -f https://api.guardian-app.com/api/health || exit 1
+
+            echo "✅ Production deployment successful"
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          echo "Deployment status: $STATUS"
+          # Ici on pourrait notifier Slack, Discord, etc.
+
+  # ── 7. DEPLOY STAGING ───────────────────────────────────────────────────────
+  deploy-staging:
+    name: 🎭 Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build-docker-api, build-web]
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: https://staging.guardian-app.com
+
+    steps:
+      - name: Deploy to staging
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_SERVER_HOST }}
+          username: ${{ secrets.STAGING_SERVER_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd /opt/guardian-staging
+            docker compose pull api
+            docker compose run --rm migrate
+            docker compose up -d --no-deps api
+            sleep 5
+            curl -f https://api.staging.guardian-app.com/api/health || exit 1
+            echo "✅ Staging deployment successful"

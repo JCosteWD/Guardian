@@ -1,0 +1,336 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# GUARDIAN – Docker Compose PRODUCTION (hardened)
+# ══════════════════════════════════════════════════════════════════════════════
+# Différences vs docker-compose.yml de dev :
+# - Pas de ports exposés directement (sauf nginx 80/443)
+# - Healthchecks sur tous les services
+# - Limites de ressources (CPU/RAM)
+# - Restart policies
+# - Secrets via fichiers (pas de variables en clair)
+# - Logs JSON avec rotation
+# - Réseau interne isolé
+# - Postgres avec backups automatiques
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml run --rm migrate
+
+version: '3.9'
+
+# ── RÉSEAUX ────────────────────────────────────────────────────────────────────
+networks:
+  guardian_internal:
+    driver: bridge
+    internal: true   # Pas d'accès internet direct (sauf via nginx)
+  guardian_public:
+    driver: bridge
+
+# ── VOLUMES ────────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backup_data:
+    driver: local
+
+# ── DEFAULTS PARTAGÉS ─────────────────────────────────────────────────────────
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+services:
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # POSTGRESQL
+  # ══════════════════════════════════════════════════════════════════════════
+  postgres:
+    image: postgres:16-alpine
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      POSTGRES_DB:       guardian
+      POSTGRES_USER:     guardian_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --data-checksums"
+    secrets:
+      - db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    networks:
+      - guardian_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guardian_user -d guardian"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    # Désactive les logs de requêtes en prod (perf + sécurité)
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c max_connections=100
+      -c log_statement=none
+      -c log_min_duration_statement=1000
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # REDIS
+  # ══════════════════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    <<: *default-restart
+    logging: *default-logging
+    command: >
+      redis-server
+      --requirepass-file /run/secrets/redis_password
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+    secrets:
+      - redis_password
+    volumes:
+      - redis_data:/data
+    networks:
+      - guardian_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # API GUARDIAN
+  # ══════════════════════════════════════════════════════════════════════════
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      NODE_ENV:           production
+      PORT:               3000
+      DB_HOST:            postgres
+      DB_PORT:            5432
+      DB_NAME:            guardian
+      DB_USER:            guardian_user
+      DB_PASSWORD_FILE:   /run/secrets/db_password
+      REDIS_HOST:         redis
+      REDIS_PORT:         6379
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      JWT_SECRET_FILE:        /run/secrets/jwt_secret
+      JWT_REFRESH_SECRET_FILE: /run/secrets/jwt_refresh_secret
+      ENCRYPTION_KEY_FILE:    /run/secrets/encryption_key
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_key
+      STRIPE_SECRET_KEY_FILE: /run/secrets/stripe_secret
+      STRIPE_WEBHOOK_SECRET_FILE: /run/secrets/stripe_webhook
+      FRONTEND_URL:       https://guardian-app.com
+    secrets:
+      - db_password
+      - redis_password
+      - jwt_secret
+      - jwt_refresh_secret
+      - encryption_key
+      - anthropic_key
+      - stripe_secret
+      - stripe_webhook
+    networks:
+      - guardian_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      replicas: 2  # Load balancé par nginx
+    # Sécurité conteneur
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # MIGRATIONS (job ponctuel)
+  # ══════════════════════════════════════════════════════════════════════════
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: guardian
+      DB_USER: guardian_user
+      DB_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    networks:
+      - guardian_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "node src/config/migrate.js &&
+             node backend-extra/migrateV3.js &&
+             node complete-tests/migrateV6.js"
+    profiles: ["migrate"]  # Ne se lance que via --profile migrate
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # WEB DASHBOARD (Nginx serving static build)
+  # ══════════════════════════════════════════════════════════════════════════
+  web:
+    build:
+      context: ./web-parent
+      dockerfile: Dockerfile
+    <<: *default-restart
+    logging: *default-logging
+    networks:
+      - guardian_internal
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # NGINX (reverse proxy, seul point d'entrée externe)
+  # ══════════════════════════════════════════════════════════════════════════
+  nginx:
+    image: nginx:1.25-alpine
+    <<: *default-restart
+    logging: *default-logging
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/www:/var/www/certbot:ro
+    networks:
+      - guardian_internal
+      - guardian_public
+    depends_on:
+      - api
+      - web
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # CERTBOT (renouvellement automatique SSL)
+  # ══════════════════════════════════════════════════════════════════════════
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./nginx/ssl:/etc/letsencrypt
+      - ./nginx/www:/var/www/certbot
+    entrypoint: >
+      sh -c "trap exit TERM;
+             while :; do
+               certbot renew --webroot -w /var/www/certbot --quiet;
+               sleep 12h & wait $${!};
+             done"
+    networks:
+      - guardian_public
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # BACKUP POSTGRES (cron quotidien)
+  # ══════════════════════════════════════════════════════════════════════════
+  backup:
+    image: postgres:16-alpine
+    <<: *default-restart
+    environment:
+      PGPASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - backup_data:/backups
+    networks:
+      - guardian_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+      while :; do
+        TIMESTAMP=$$(date +%Y%m%d_%H%M%S);
+        export PGPASSWORD=$$(cat /run/secrets/db_password);
+        pg_dump -h postgres -U guardian_user -d guardian -F c -f /backups/guardian_$$TIMESTAMP.dump;
+        find /backups -name '*.dump' -mtime +30 -delete;
+        echo 'Backup completed: guardian_'$$TIMESTAMP'.dump';
+        sleep 86400;
+      done"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECRETS (fichiers dans ./secrets/ — NE JAMAIS COMMITER)
+# ══════════════════════════════════════════════════════════════════════════════
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  jwt_refresh_secret:
+    file: ./secrets/jwt_refresh_secret.txt
+  encryption_key:
+    file: ./secrets/encryption_key.txt
+  anthropic_key:
+    file: ./secrets/anthropic_key.txt
+  stripe_secret:
+    file: ./secrets/stripe_secret.txt
+  stripe_webhook:
+    file: ./secrets/stripe_webhook.txt

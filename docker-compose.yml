@@ -1,0 +1,146 @@
+version: '3.9'
+
+services:
+
+  # ── BACKEND NODE.JS ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: guardian-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: guardian_db
+      DB_USER: guardian_user
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PRICE_FAMILY: ${STRIPE_PRICE_FAMILY}
+      STRIPE_PRICE_PREMIUM: ${STRIPE_PRICE_PREMIUM}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/logs:/app/logs
+    networks:
+      - guardian-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── POSTGRESQL ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: guardian-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: guardian_db
+      POSTGRES_USER: guardian_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - guardian-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guardian_user -d guardian_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── REDIS ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: guardian-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - guardian-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── WEB PARENT (React) ───────────────────────────────────────────────────────
+  web:
+    build:
+      context: ./web-parent
+      dockerfile: Dockerfile
+    container_name: guardian-web
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    depends_on:
+      - api
+    networks:
+      - guardian-net
+
+  # ── NGINX REVERSE PROXY ──────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: guardian-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - web
+    networks:
+      - guardian-net
+
+  # ── MIGRATION (one-shot) ─────────────────────────────────────────────────────
+  migrate:
+    build:
+      context: ./backend
+    container_name: guardian-migrate
+    command: node src/config/migrate.js
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: guardian_db
+      DB_USER: guardian_user
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - guardian-net
+    restart: "no"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  guardian-net:
+    driver: bridge
