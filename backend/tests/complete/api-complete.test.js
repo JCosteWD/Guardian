@@ -2,7 +2,7 @@ const request = require('supertest');
 const bcrypt  = require('bcryptjs');
 
 // ── Mocks identiques au fichier de test v1 ────────────────────────────────────
-jest.mock('../src/config/redis', () => ({
+jest.mock('../../src/config/redis', () => ({
   connect:    jest.fn().mockResolvedValue(true),
   getClient:  jest.fn().mockReturnValue({
     get:    jest.fn().mockResolvedValue(null),
@@ -42,12 +42,12 @@ jest.mock('../src/config/redis', () => ({
   },
 }));
 
-jest.mock('../src/services/notificationService', () => ({
+jest.mock('../../src/services/notificationService', () => ({
   sendToParent: jest.fn().mockResolvedValue(true),
   sendToChild:  jest.fn().mockResolvedValue(true),
 }));
 
-jest.mock('@anthropic/sdk', () => jest.fn().mockImplementation(() => ({
+jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({
   messages: {
     create: jest.fn().mockResolvedValue({
       content: [{ type: 'text', text: 'Bonjour ! Je suis Guardian. Comment puis-je t\'aider ?' }],
@@ -82,13 +82,13 @@ const mockChild = {
   is_active: true, subscription_plan: 'premium',
 };
 
-jest.mock('../src/config/database', () => ({
+jest.mock('../../src/config/database', () => ({
   query: jest.fn(),
   transaction: jest.fn(),
   pool: { connect: jest.fn(), end: jest.fn() },
 }));
 
-const { query, transaction } = require('../src/config/database');
+const { query, transaction } = require('../../src/config/database');
 
 const setupMocks = () => {
   query.mockImplementation((sql) => {
@@ -134,8 +134,10 @@ beforeAll(async () => {
   process.env.ANTHROPIC_API_KEY = 'test-key';
   process.env.STRIPE_SECRET_KEY = 'sk_test_fake';
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_fake';
+  process.env.STRIPE_PRICE_FAMILY = 'price_123_family';
+  process.env.STRIPE_PRICE_PREMIUM = 'price_123_premium';
   setupMocks();
-  app = require('../src/server').app;
+  app = require('../../src/server').app;
 });
 
 afterEach(() => { jest.clearAllMocks(); setupMocks(); });
@@ -254,8 +256,8 @@ describe('Rules', () => {
   });
 
   test('POST grade → 200 (bonne note = bonus)', async () => {
-    query.mockImplementationOnce(() => Promise.resolve({ rows: [{ id: 'grade-uuid', subject: 'Maths', grade: 18, max_grade: 20 }] }));
     const h = await auth();
+    query.mockImplementationOnce(() => Promise.resolve({ rows: [{ id: 'grade-uuid', subject: 'Maths', grade: 18, max_grade: 20 }] }));
     const res = await request(app)
       .post(`/api/children/${mockChild.id}/grades`).set(h)
       .send({ subject: 'Maths', grade: 18, maxGrade: 20, gradeDate: new Date() });
@@ -264,8 +266,8 @@ describe('Rules', () => {
   });
 
   test('POST grade → 200 (mauvaise note = pénalité)', async () => {
-    query.mockImplementationOnce(() => Promise.resolve({ rows: [{ id: 'grade-uuid', subject: 'Histoire', grade: 5, max_grade: 20 }] }));
     const h = await auth();
+    query.mockImplementationOnce(() => Promise.resolve({ rows: [{ id: 'grade-uuid', subject: 'Histoire', grade: 5, max_grade: 20 }] }));
     const res = await request(app)
       .post(`/api/children/${mockChild.id}/grades`).set(h)
       .send({ subject: 'Histoire', grade: 5, maxGrade: 20, gradeDate: new Date() });
@@ -316,9 +318,8 @@ describe('AI Service', () => {
   });
 
   test('POST /api/ai/chat → 403 (free plan)', async () => {
-    query.mockImplementationOnce(() => Promise.resolve({ rows: [{ ...mockChild, subscription_plan: 'free' }] }));
-    query.mockImplementationOnce(() => Promise.resolve({ rows: [mockParent] }));
     const h = await auth('child');
+    query.mockImplementationOnce(() => Promise.resolve({ rows: [{ ...mockChild, subscription_plan: 'free' }] }));
     const res = await request(app).post('/api/ai/chat').set(h).send({ message: 'Bonjour' });
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('UPGRADE_REQUIRED');
@@ -402,7 +403,7 @@ describe('Sécurité', () => {
 
   test('Rate limiting auth → 429 après trop de tentatives', async () => {
     // Simule le dépassement du rate limit
-    const { rateLimit } = require('../src/config/redis');
+    const { rateLimit } = require('../../src/config/redis');
     rateLimit.check.mockResolvedValueOnce({ count: 11, exceeded: true });
     const res = await request(app).post('/api/auth/login').send({ email: 'test@guardian.com', password: 'Password123' });
     expect(res.status).toBe(429);
@@ -417,13 +418,13 @@ describe('Sécurité', () => {
 // ══════════════════════════════════════════════════════════════════════════════
 describe('RGPD', () => {
   test('GET /api/gdpr/export → 200', async () => {
+    const h = await auth();
     query.mockImplementation((sql) => {
       if (sql.includes('parents') && sql.includes('id = $1')) return Promise.resolve({ rows: [mockParent] });
       if (sql.includes('children')) return Promise.resolve({ rows: [mockChild] });
       if (sql.includes('subscriptions')) return Promise.resolve({ rows: [{ plan: 'premium', status: 'active' }] });
       return Promise.resolve({ rows: [] });
     });
-    const h = await auth();
     const res = await request(app).get('/api/gdpr/export').set(h);
     expect(res.status).toBe(200);
     expect(res.body.exportedBy).toBe(mockParent.email);
