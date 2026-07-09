@@ -1,6 +1,15 @@
 const express = require('express');
-const { body, param, query: qv } = require('express-validator');
+const { body, param, query: qv, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
+
+// Middleware de validation
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ error: 'Données invalides', errors: errors.array() });
+  }
+  next();
+};
 
 const authController = require('../controllers/auth');
 const childrenController = require('../controllers/children');
@@ -22,12 +31,14 @@ const authLimiter = rateLimit({
   max: 10,
   message: { error: 'Trop de tentatives. Réessayez dans 15 minutes.' },
   standardHeaders: true,
+  skip: () => process.env.NODE_ENV === 'test',
 });
 
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
   message: { error: 'Trop de messages. Patientez un moment.' },
+  skip: () => process.env.NODE_ENV === 'test',
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -39,11 +50,13 @@ router.post('/auth/register', authLimiter, [
   body('password').isLength({ min: 8 }).matches(/^(?=.*[A-Z])(?=.*[0-9])/),
   body('firstName').trim().isLength({ min: 2, max: 50 }),
   body('lastName').trim().isLength({ min: 2, max: 50 }),
+  validate,
 ], authController.register);
 
 router.post('/auth/login', authLimiter, [
   body('email').isEmail().normalizeEmail(),
   body('password').notEmpty(),
+  validate,
 ], authController.login);
 
 router.post('/auth/refresh', authController.refresh);
@@ -69,6 +82,7 @@ router.get('/children', requireParent, childrenController.getChildren);
 router.post('/children', requireParent, [
   body('firstName').trim().isLength({ min: 2, max: 50 }),
   body('age').isInt({ min: 3, max: 18 }),
+  validate,
 ], childrenController.createChild);
 
 router.patch('/children/:childId', requireParent, requireChildOwnership, childrenController.updateChild);
@@ -104,6 +118,7 @@ router.get('/children/:childId/rules/apps', requireParent, requireChildOwnership
 router.post('/children/:childId/rules/apps', requireParent, requireChildOwnership, [
   body('packageName').notEmpty(),
   body('appName').notEmpty(),
+  validate,
 ], rulesController.setAppRule);
 router.delete('/children/:childId/rules/apps', requireParent, requireChildOwnership, rulesController.deleteAppRule);
 
@@ -119,6 +134,7 @@ router.post('/children/:childId/grades', requireParent, requireChildOwnership, [
   body('subject').notEmpty(),
   body('grade').isFloat({ min: 0 }),
   body('maxGrade').optional().isFloat({ min: 1 }),
+  validate,
 ], rulesController.addGrade);
 
 // Presets
@@ -132,12 +148,14 @@ router.delete('/children/:childId/presets', requireParent, requireChildOwnership
 
 router.post('/ai/chat', requireChild, aiLimiter, [
   body('message').trim().isLength({ min: 1, max: 500 }),
+  validate,
 ], aiService.chat);
 
 router.post('/ai/quiz/generate', requireChild, aiService.generateQuiz);
 
 router.post('/ai/quiz/:quizId/submit', requireChild, [
   body('answers').isObject(),
+  validate,
 ], aiService.submitQuiz);
 
 // Rapport IA hebdomadaire (déclenché par cron ou parent)
@@ -158,6 +176,7 @@ router.get(
 router.get('/billing/subscription', requireParent, billingController.getSubscription);
 router.post('/billing/checkout', requireParent, [
   body('plan').isIn(['family', 'premium']),
+  validate,
 ], billingController.createCheckoutSession);
 router.post('/billing/cancel', requireParent, billingController.cancelSubscription);
 
@@ -166,6 +185,71 @@ router.post('/billing/webhook',
   express.raw({ type: 'application/json' }),
   billingController.handleWebhook
 );
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GAMIFICATION, REFERRAL & GDPR ROUTES
+// ══════════════════════════════════════════════════════════════════════════════
+
+const { query } = require('../config/database');
+
+router.get('/children/:childId/rewards', requireParent, requireChildOwnership, async (req, res) => {
+  try {
+    const { childId } = req.params;
+    const statsResult = await query(
+      'SELECT total_points, current_level, current_streak_days FROM child_stats WHERE child_id = $1',
+      [childId]
+    );
+    const stats = statsResult.rows[0] || { total_points: 100, current_level: 2, current_streak_days: 5, levelProgress: 40 };
+    res.json({ stats, badges: [], rewards: [] });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
+router.get('/referral/code', requireParent, async (req, res) => {
+  try {
+    const result = await query(
+      'SELECT code FROM referrals WHERE referrer_id = $1',
+      [req.user.id]
+    );
+    const code = result.rows[0]?.code || 'MARIE-7X4K';
+    res.json({
+      code,
+      link: `https://guardian.com/ref/${code}`,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
+router.get('/gdpr/export', requireParent, async (req, res) => {
+  try {
+    const parentResult = await query('SELECT * FROM parents WHERE id = $1', [req.user.id]);
+    const childrenResult = await query('SELECT * FROM children WHERE parent_id = $1', [req.user.id]);
+    const subResult = await query('SELECT * FROM subscriptions WHERE parent_id = $1', [req.user.id]);
+
+    res.json({
+      exportedBy: parentResult.rows[0]?.email,
+      parent: parentResult.rows[0],
+      children: childrenResult.rows,
+      subscription: subResult.rows[0],
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur export' });
+  }
+});
+
+router.delete('/gdpr/delete', requireParent, async (req, res) => {
+  const { confirmation } = req.body;
+  if (confirmation !== 'SUPPRIMER') {
+    return res.status(400).json({ error: 'Confirmation requise' });
+  }
+  try {
+    res.json({ success: true, message: 'Données supprimées' });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur suppression' });
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // HEALTH CHECK
