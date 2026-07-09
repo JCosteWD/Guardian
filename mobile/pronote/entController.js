@@ -319,6 +319,21 @@ const syncChildGrades = async (childId) => {
           });
         }
 
+        // Écrit dans les behavior_logs pour l'IA et le suivi parent
+        if (penaltyMins > 0 || bonusMins > 0) {
+          const impact = bonusMins > 0 ? bonusMins : -penaltyMins;
+          const logType = bonusMins > 0 ? 'grade_bonus' : 'grade_penalty';
+          const logDesc = bonusMins > 0
+            ? `Excellente note de ${g.grade}/${g.maxGrade || 20} en ${g.subject} (${config.platform}). Bonus de +${bonusMins} min.`
+            : `Ajustement de temps d'écran suite à une note de ${g.grade}/${g.maxGrade || 20} en ${g.subject} (${config.platform}). Restriction de -${penaltyMins} min.`;
+
+          await query(
+            `INSERT INTO behavior_logs (child_id, parent_id, type, description, impact_mins, is_positive)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [childId, child.rows[0].parent_id, logType, logDesc, impact, bonusMins > 0]
+          );
+        }
+
         // Gamification
         await processGradeReward(childId, pct * 100, g.subject);
 

@@ -317,6 +317,26 @@ describe('AI Service', () => {
     expect(res.body.remainingMins).toBeDefined();
   });
 
+  test('POST /api/ai/chat avec pénalité de note Pronote → 200 et motivation', async () => {
+    const h = await auth('child');
+    const { quota: qMock } = require('../../src/config/redis');
+    qMock.get.mockResolvedValueOnce({ usedMins:30, baseLimitMins:120, bonusMins:0, penaltyMins:30, isLocked:false, lockReason:null });
+
+    query.mockImplementation((sql) => {
+      if (sql.includes('children') && sql.includes('parents')) return Promise.resolve({ rows: [{ ...mockChild, parent_first_name: 'Marie' }] });
+      if (sql.includes('grades')) return Promise.resolve({ rows: [{ subject: 'Mathématiques', grade: 6, max_grade: 20 }] });
+      if (sql.includes('daily_quotas')) return Promise.resolve({ rows: [{ base_limit_mins:120, bonus_mins:0, penalty_mins:30, used_mins:30, is_locked:false }] });
+      if (sql.includes('behavior_logs')) return Promise.resolve({ rows: [{ type: 'grade_penalty', description: 'Ajustement Pronote : -30 min pour un 6/20 en Mathématiques', is_positive: false }] });
+      if (sql.includes('ai_conversations')) return Promise.resolve({ rows: [{ id: 'conv-uuid' }] });
+      if (sql.includes('activity_events')) return Promise.resolve({ rows: [] });
+      return Promise.resolve({ rows: [mockChild] });
+    });
+    const res = await request(app).post('/api/ai/chat').set(h).send({ message: 'Pourquoi ma tablette est limitée ?' });
+    expect(res.status).toBe(200);
+    expect(res.body.response).toBeDefined();
+    expect(res.body.remainingMins).toBe(60); // (120 - 30) - 30 = 60
+  });
+
   test('POST /api/ai/chat → 403 (free plan)', async () => {
     const h = await auth('child');
     query.mockImplementationOnce(() => Promise.resolve({ rows: [{ ...mockChild, subscription_plan: 'free' }] }));
