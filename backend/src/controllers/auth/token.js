@@ -5,11 +5,13 @@ const { session } = require('../../config/redis');
 const logger = require('../../utils/logger');
 
 exports.generateTokens = (userId, type) => {
+  const secret = process.env.JWT_SECRET || 'default_jwt_secret_dev_key_guardian_app_64_chars';
+  const refreshSecret = process.env.JWT_REFRESH_SECRET || 'default_jwt_refresh_secret_dev_key_guardian_app_64_chars';
   const payload = { id: userId, type };
-  const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
+  const accessToken = jwt.sign(payload, secret, {
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
   });
-  const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, {
+  const refreshToken = jwt.sign(payload, refreshSecret, {
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   });
   return { accessToken, refreshToken };
@@ -33,7 +35,8 @@ exports.refresh = async (req, res) => {
   if (!refreshToken) return res.status(400).json({ error: 'Refresh token requis' });
 
   try {
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const refreshSecret = process.env.JWT_REFRESH_SECRET || 'default_jwt_refresh_secret_dev_key_guardian_app_64_chars';
+    const decoded = jwt.verify(refreshToken, refreshSecret);
 
     // Vérifie en DB
     const tokens = await query(

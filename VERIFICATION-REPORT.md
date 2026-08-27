@@ -238,7 +238,9 @@ Ces dossiers contiennent des fonctionnalités supplémentaires qui peuvent être
 2. **backend/package.json**: Correction dépendance Anthropic (`@anthropic-ai/sdk`)
 3. **backend/src/services/aiService.js**: Mise à jour import Anthropic
 4. **backend/src/config/redis.js**: Implémentation mode dégradé
-5. **backend/src/server.js**: Implémentation mode dégradé PostgreSQL
+5. **backend/src/server.js**: Implémentation mode dégradé PostgreSQL et isolation du démarrage serveur en mode test
+6. **backend/src/middleware/auth.js**: Sécurisation du mode dev et restriction du bypass d'authentification au flag explicite DEMO_MODE
+7. **web**: Validation de la chaîne de build React
 
 ---
 

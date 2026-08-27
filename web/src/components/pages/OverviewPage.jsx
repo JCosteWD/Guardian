@@ -2,20 +2,27 @@ import { useState, useEffect } from 'react';
 import { API } from '../api';
 import { useApp } from '../context';
 import { Button } from '../common/Button';
+import { AddChildModal } from '../common/AddChildModal';
 
 export function OverviewPage() {
   const { children, loadChildren, showToast } = useApp();
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   useEffect(() => { loadChildren(); }, []);
 
-  const handleQuickAction = async (child, delta, label) => {
+  const handleQuickAction = async (child, delta, label, lockState) => {
     try {
-      await API.post(`/children/${child.id}/quick-action`, {
-        customDelta: delta, childName: child.first_name,
-      });
+      const payload = { childName: child.first_name };
+      if (typeof lockState === 'boolean') {
+        payload.customLock = lockState;
+      } else {
+        payload.customDelta = delta;
+      }
+
+      await API.post(`/children/${child.id}/quick-action`, payload);
       showToast(`✅ ${label} appliqué à ${child.first_name}`);
       loadChildren();
-    } catch { showToast('❌ Erreur', false); }
+    } catch { showToast('❌ Erreur lors de l\'action rapide', false); }
   };
 
   const handleGradeQuick = async (child, grade) => {
@@ -26,7 +33,7 @@ export function OverviewPage() {
       const msg = data.penaltyMins > 0 ? `📉 -${data.penaltyMins} min appliqué` : data.bonusMins > 0 ? `⭐ +${data.bonusMins} min bonus !` : `📝 Note enregistrée`;
       showToast(msg, data.bonusMins > 0);
       loadChildren();
-    } catch { showToast('❌ Erreur', false); }
+    } catch { showToast('❌ Erreur lors de l\'enregistrement de la note', false); }
   };
 
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -38,7 +45,7 @@ export function OverviewPage() {
           <h1 className="page-title">Tableau de bord</h1>
           <p className="page-sub">{today}</p>
         </div>
-        <Button onClick={() => window.location.hash = 'add-child'}>
+        <Button onClick={() => setIsAddModalOpen(true)}>
           ➕ Ajouter un enfant
         </Button>
       </div>
@@ -108,7 +115,7 @@ export function OverviewPage() {
                   { icon: '📈', label: '+30 min', color: 'var(--green)', fn: () => handleQuickAction(child, 30, '+30 min') },
                   { icon: '📝', label: 'Note', color: 'var(--yellow)', fn: () => { const g = prompt('Note /20 ?'); if (g) handleGradeQuick(child, parseFloat(g)); } },
                   { icon: child.is_locked ? '🔓' : '🔒', label: child.is_locked ? 'Déverrouiller' : 'Bloquer', color: child.is_locked ? 'var(--green)' : 'var(--red)',
-                    fn: () => handleQuickAction(child, 0, child.is_locked ? 'Déverrouillé' : 'Bloqué') },
+                    fn: () => handleQuickAction(child, 0, child.is_locked ? 'Déverrouillé' : 'Bloqué', !child.is_locked) },
                 ].map((a, i) => (
                   <button key={i} className="qa-btn" onClick={a.fn} style={{ color: a.color }}>
                     <span className="qa-icon">{a.icon}</span>
@@ -120,6 +127,11 @@ export function OverviewPage() {
           );
         })}
       </div>
+
+      <AddChildModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+      />
     </div>
   );
 }

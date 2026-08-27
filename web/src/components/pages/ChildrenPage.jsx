@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { API } from '../api';
 import { useApp } from '../context';
 import { Button } from '../common/Button';
+import { AddChildModal } from '../common/AddChildModal';
 
 export function ChildrenPage() {
   const { children, loadChildren, showToast } = useApp();
@@ -9,6 +10,7 @@ export function ChildrenPage() {
   const [activeSubTab, setActiveSubTab] = useState('overview'); // 'overview', 'pronote', 'gamification'
   const [childDashboard, setChildDashboard] = useState(null);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // Pronote simulation / config state
   const [pronoteUser, setPronoteUser] = useState('');
@@ -60,11 +62,16 @@ export function ChildrenPage() {
     }
   };
 
-  const handleQuickAction = async (child, delta, label) => {
+  const handleQuickAction = async (child, delta, label, lockState) => {
     try {
-      await API.post(`/children/${child.id}/quick-action`, {
-        customDelta: delta, childName: child.first_name,
-      });
+      const payload = { childName: child.first_name };
+      if (typeof lockState === 'boolean') {
+        payload.customLock = lockState;
+      } else {
+        payload.customDelta = delta;
+      }
+
+      await API.post(`/children/${child.id}/quick-action`, payload);
       showToast(`✅ ${label} appliqué à ${child.first_name}`);
       loadChildren();
       if (selectedChild && selectedChild.id === child.id) {
@@ -126,7 +133,7 @@ export function ChildrenPage() {
           <h1 className="page-title">Famille et Scolarité</h1>
           <p className="page-sub">Gérer les profils, suivre la scolarité et motiver vos enfants</p>
         </div>
-        <Button onClick={() => window.location.hash = 'add-child'}>
+        <Button onClick={() => setIsAddModalOpen(true)}>
           ➕ Ajouter un enfant
         </Button>
       </div>
@@ -276,7 +283,7 @@ export function ChildrenPage() {
                     <span style={{ fontSize: 24, marginBottom: 4 }}>📝</span>
                     <strong>Saisir une note scolaire</strong>
                   </button>
-                  <button className="qa-btn" onClick={() => handleQuickAction(selectedChild, 0, selectedChild.is_locked ? 'Déverrouillé' : 'Verrouillé')} style={{ color: selectedChild.is_locked ? 'var(--green)' : 'var(--red)', padding: 12 }}>
+                  <button className="qa-btn" onClick={() => handleQuickAction(selectedChild, 0, selectedChild.is_locked ? 'Déverrouillé' : 'Verrouillé', !selectedChild.is_locked)} style={{ color: selectedChild.is_locked ? 'var(--green)' : 'var(--red)', padding: 12 }}>
                     <span style={{ fontSize: 24, marginBottom: 4 }}>{selectedChild.is_locked ? '🔓' : '🔒'}</span>
                     <strong>{selectedChild.is_locked ? 'Déverrouiller l\'appareil' : 'Verrouiller l\'appareil'}</strong>
                   </button>
@@ -682,6 +689,11 @@ export function ChildrenPage() {
           </p>
         </div>
       )}
+
+      <AddChildModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+      />
     </div>
   );
 }

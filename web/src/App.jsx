@@ -199,7 +199,12 @@ function AppContent() {
   }, []);
 
   if (!parent) {
-    return <LoginPage onLogin={setParent} />;
+    return (
+      <div>
+        <style>{css}</style>
+        <LoginPage onLogin={setParent} />
+      </div>
+    );
   }
 
   const renderPage = () => {
