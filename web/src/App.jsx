@@ -7,6 +7,8 @@ import { ChildrenPage } from './components/pages/ChildrenPage';
 import { RulesPage } from './components/pages/RulesPage';
 import { SubscriptionPage } from './components/pages/SubscriptionPage';
 import { SettingsPage } from './components/pages/SettingsPage';
+import { ChildChatPage } from './components/pages/ChildChatPage';
+import { ChildQuizPage } from './components/pages/ChildQuizPage';
 import { Sidebar } from './components/layout/Sidebar';
 import { Toast } from './components/layout/Toast';
 
@@ -214,6 +216,7 @@ function AppContent() {
       case 'rules': return <RulesPage />;
       case 'subscription': return <SubscriptionPage />;
       case 'settings': return <SettingsPage />;
+      case 'child-chat': return <ChildChatPage />;
       default: return <OverviewPage />;
     }
   };
