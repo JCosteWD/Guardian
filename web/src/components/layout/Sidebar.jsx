@@ -11,6 +11,11 @@ export function Sidebar({ page, setPage }) {
     { id: 'settings', icon: '⚙️', label: 'Paramètres' },
   ];
 
+  const handleLogout = () => {
+    localStorage.removeItem('guardian_token');
+    window.location.reload();
+  };
+
   return (
     <div className="sidebar">
       <div className="sidebar-logo">
@@ -31,7 +36,7 @@ export function Sidebar({ page, setPage }) {
         ))}
       </div>
       <div className="sidebar-bottom">
-        <button className="nav-item" onClick={() => window.location.reload()}>
+        <button className="nav-item" onClick={handleLogout}>
           <span className="icon">🚪</span>
           <span>Déconnexion</span>
         </button>

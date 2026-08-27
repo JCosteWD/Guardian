@@ -14,7 +14,7 @@ const verifyToken = async (req, res, next) => {
       if (authHeader && authHeader.startsWith('Bearer ')) {
         try {
           const token = authHeader.split(' ')[1];
-          decoded = jwt.verify(token, process.env.JWT_SECRET);
+          decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_jwt_secret_dev_key_guardian_app_64_chars');
         } catch (jwtErr) {
           logger.warn('Token invalide en mode démo - Création utilisateur démo');
           decoded = { id: 'demo-id', type: 'parent' };
@@ -35,7 +35,7 @@ const verifyToken = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_jwt_secret_dev_key_guardian_app_64_chars');
 
     // MODE DÉMO - Si Redis non disponible, skip la vérification de session
     if (process.env.NODE_ENV === 'development') {

@@ -11,7 +11,7 @@ exports.login = async (req, res) => {
 
   try {
     // MODE DÉMO FORCÉ
-    if (process.env.DEMO_MODE === 'true' || process.env.NODE_ENV === 'development') {
+    if (process.env.DEMO_MODE === 'true') {
       logger.warn('Mode démo activé - Accepte n\'importe quel login');
       const demoParent = {
         id: 'demo-id',
@@ -114,6 +114,32 @@ exports.login = async (req, res) => {
     });
   } catch (err) {
     logger.error('Login error:', err);
+    if (process.env.DEMO_MODE === 'true' || process.env.NODE_ENV === 'development') {
+      logger.warn('Mode dégradé sans PostgreSQL - Retourne un utilisateur démo');
+      const demoParent = {
+        id: 'demo-id',
+        email: email || 'demo@guardian.com',
+        firstName: 'Parent',
+        lastName: 'Demo',
+        plan: 'premium',
+        subStatus: 'active',
+      };
+      const tokens = generateTokens(demoParent.id, 'parent');
+      return res.json({
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        parent: {
+          id: demoParent.id,
+          email: demoParent.email,
+          firstName: demoParent.firstName,
+          lastName: demoParent.lastName,
+          plan: demoParent.plan,
+          subStatus: demoParent.subStatus,
+          hasPIN: false,
+          twoFAEnabled: false,
+        },
+      });
+    }
     res.status(500).json({ error: 'Erreur de connexion' });
   }
 };
