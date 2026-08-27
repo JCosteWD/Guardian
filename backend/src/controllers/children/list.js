@@ -102,6 +102,35 @@ exports.getChildren = async (req, res) => {
     res.json({ children: result.rows });
   } catch (err) {
     logger.error('getChildren error:', err);
+    if (process.env.DEMO_MODE === 'true' || process.env.NODE_ENV === 'development') {
+      const demoChildren = [
+        {
+          id: 'ethan-id', first_name: 'Ethan', age: 17, avatar_url: null, avatar_color: '#3B82F6',
+          device_id: 'iphone-ethan', device_name: 'iPhone 15 Pro', is_active: true,
+          ai_persona_name: 'Guardian', ai_tone: 'friendly', last_seen: new Date(),
+          used_mins_today: 45, base_limit: 180, bonus_mins: 0, penalty_mins: 0, is_locked: false
+        },
+        {
+          id: 'morgan-id', first_name: 'Morgan', age: 11, avatar_url: null, avatar_color: '#10B981',
+          device_id: 'samsung-morgan', device_name: 'Samsung Galaxy A54', is_active: true,
+          ai_persona_name: 'Pixel', ai_tone: 'fun', last_seen: new Date(),
+          used_mins_today: 90, base_limit: 120, bonus_mins: 15, penalty_mins: 0, is_locked: false
+        },
+        {
+          id: 'lana-id', first_name: 'Lana', age: 7, avatar_url: null, avatar_color: '#f50bc2c5',
+          device_id: 'tablet-lana', device_name: 'iPad Air', is_active: true,
+          ai_persona_name: 'Guardian', ai_tone: 'friendly', last_seen: new Date(),
+          used_mins_today: 60, base_limit: 90, bonus_mins: 0, penalty_mins: 0, is_locked: false
+        },
+        {
+          id: 'loan-id', first_name: 'Loan', age: 4, avatar_url: null, avatar_color: '#e4b210',
+          device_id: 'tablet-loan', device_name: 'Tablette Android', is_active: true,
+          ai_persona_name: 'Pixel', ai_tone: 'fun', last_seen: new Date(),
+          used_mins_today: 30, base_limit: 60, bonus_mins: 0, penalty_mins: 0, is_locked: false
+        }
+      ];
+      return res.json({ children: demoChildren });
+    }
     res.status(500).json({ error: 'Erreur lors de la récupération des enfants' });
   }
 };

@@ -22,12 +22,16 @@ exports.saveSession = async (userId, type, data = {}) => {
 };
 
 exports.saveRefreshToken = async (userId, refreshToken, ip, userAgent) => {
-  const tokenHash = await bcrypt.hash(refreshToken, 6);
-  await query(
-    `INSERT INTO refresh_tokens (user_id, user_type, token_hash, expires_at, device_info)
-     VALUES ($1, 'parent', $2, NOW() + INTERVAL '7 days', $3)`,
-    [userId, tokenHash, JSON.stringify({ ip, ua: userAgent })]
-  );
+  try {
+    const tokenHash = await bcrypt.hash(refreshToken, 6);
+    await query(
+      `INSERT INTO refresh_tokens (user_id, user_type, token_hash, expires_at, device_info)
+       VALUES ($1, 'parent', $2, NOW() + INTERVAL '7 days', $3)`,
+      [userId, tokenHash, JSON.stringify({ ip, ua: userAgent })]
+    );
+  } catch (err) {
+    logger.warn('PostgreSQL non disponible (saveRefreshToken ignoré en mode dégradé)');
+  }
 };
 
 exports.refresh = async (req, res) => {

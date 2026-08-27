@@ -215,7 +215,7 @@ process.on('SIGINT',  () => shutdown('SIGINT'));
 process.on('unhandledRejection', (reason) => logger.error('Unhandled rejection:', reason));
 process.on('uncaughtException',  (err)    => { logger.error('Uncaught exception:', err); process.exit(1); });
 
-if (process.env.NODE_ENV !== 'test' && require.main === module) {
+if (process.env.NODE_ENV !== 'test') {
   start();
 }
 
