@@ -3,7 +3,7 @@ const { query } = require('../config/database');
 const { quota } = require('../config/redis');
 const logger = require('../utils/logger');
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || 'dummy_key_for_dev_mode' });
 
 // ── BUILD CHILD CONTEXT ───────────────────────────────────────────────────────
 const buildChildContext = async (childId) => {
