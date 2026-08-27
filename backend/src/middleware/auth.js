@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
 const verifyToken = async (req, res, next) => {
   try {
     // MODE DÉMO FORCÉ - Accepte n'importe quel token ou aucun token
-    if (process.env.DEMO_MODE === 'true' || process.env.NODE_ENV === 'development') {
+    if (process.env.DEMO_MODE === 'true') {
       const authHeader = req.headers.authorization;
       let decoded;
       
