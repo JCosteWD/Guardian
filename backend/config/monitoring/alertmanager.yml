@@ -1,0 +1,64 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# GUARDIAN – Alertmanager configuration
+# ══════════════════════════════════════════════════════════════════════════════
+# Route les alertes Prometheus vers Slack/Email selon la sévérité.
+
+global:
+  resolve_timeout: 5m
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+
+    # Alertes critiques → Slack #alerts + email immédiat
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      repeat_interval: 30m
+      continue: true
+
+    # Alertes warning → Slack #monitoring
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+
+receivers:
+
+  - name: 'default'
+    slack_configs:
+      - channel: '#monitoring'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+  - name: 'critical-alerts'
+    slack_configs:
+      - channel: '#alerts'
+        title: '🔴 CRITIQUE: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+    email_configs:
+      - to: 'oncall@guardian-app.com'
+        from: 'alerts@guardian-app.com'
+        smarthost: 'smtp.sendgrid.net:587'
+        auth_username: 'apikey'
+        auth_password: '${SENDGRID_API_KEY}'
+        send_resolved: true
+
+  - name: 'warning-alerts'
+    slack_configs:
+      - channel: '#monitoring'
+        title: '⚠️ {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+inhibit_rules:
+  # Si l'API est down, n'envoie pas aussi les alertes de latence
+  - source_match:
+      alertname: 'APIDown'
+    target_match:
+      alertname: 'SlowAPIResponses'
+    equal: ['instance']

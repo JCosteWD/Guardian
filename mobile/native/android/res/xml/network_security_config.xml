@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GUARDIAN – Configuration de sécurité réseau
+  =============================================
+  Force HTTPS pour toutes les connexions.
+  Interdit le texte clair (HTTP) ce qui empêche les outils de sniffing simples.
+  Épingle le certificat SSL de l'API pour empêcher les attaques MITM.
+  Même si l'enfant installe un certificat racine malveillant,
+  le certificate pinning garantit que seul le vrai serveur Guardian est accepté.
+-->
+<network-security-config>
+
+    <!-- ── DOMAINE DE PRODUCTION ─────────────────────────────────────────── -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">guardian-app.com</domain>
+        <domain includeSubdomains="true">api.guardian-app.com</domain>
+
+        <!-- Certificate pinning : empêche les attaques MITM même avec un cert racine personnalisé -->
+        <pin-set expiration="2027-01-01">
+            <!-- SHA-256 du certificat public de l'API Guardian (à remplacer par le vrai) -->
+            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
+            <!-- Backup pin (rotation de certificat) -->
+            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
+        </pin-set>
+
+        <trust-anchors>
+            <!-- Fait confiance uniquement aux CAs système reconnus -->
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- ── DÉVELOPPEMENT LOCAL (émulateur Android) ───────────────────────── -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">192.168.1.0</domain>
+    </domain-config>
+
+    <!-- ── POLITIQUE PAR DÉFAUT ───────────────────────────────────────────── -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <!-- N'accepte PAS les certificats utilisateur installés manuellement -->
+            <!-- Cela empêche l'enfant d'installer un proxy pour inspecter le trafic -->
+        </trust-anchors>
+    </base-config>
+
+</network-security-config>

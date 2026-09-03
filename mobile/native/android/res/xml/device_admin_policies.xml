@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GUARDIAN – Politiques d'administration de l'appareil
+  ======================================================
+  Déclare les capacités MDM de Guardian.
+  Ces politiques permettent au DeviceAdminReceiver d'appliquer
+  les restrictions de sécurité via DevicePolicyManager.
+
+  CAPACITÉS DÉCLARÉES:
+  - force-lock          : verrouillage immédiat de l'écran
+  - reset-password      : modification du PIN de déverrouillage
+  - limit-password      : contraintes sur le mot de passe
+  - watch-login         : surveillance des tentatives de connexion
+  - wipe-data           : réinitialisation d'urgence (si contournement grave)
+-->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <!-- Permet de verrouiller l'écran immédiatement -->
+        <force-lock />
+
+        <!-- Permet de définir des contraintes sur le mot de passe -->
+        <limit-password />
+
+        <!-- Surveille les tentatives de connexion échouées -->
+        <watch-login />
+
+        <!-- Réinitialisation en dernier recours si l'appareil est compromis -->
+        <wipe-data />
+
+        <!-- Désactive l'appareil photo si nécessaire -->
+        <disable-camera />
+
+        <!-- Expiration du mot de passe -->
+        <expire-password />
+    </uses-policies>
+</device-admin>

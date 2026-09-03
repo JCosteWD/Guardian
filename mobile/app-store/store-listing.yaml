@@ -1,0 +1,248 @@
+# 🏪 GUARDIAN – Assets & Métadonnées App Store / Google Play
+# ============================================================
+# Ce fichier liste tous les assets nécessaires et les textes
+# pour la soumission sur Google Play Store.
+
+# ══════════════════════════════════════════════════════════════
+# GOOGLE PLAY STORE
+# ══════════════════════════════════════════════════════════════
+
+## Informations de base
+app_id:          "com.guardian.parent"       # App Parent
+app_id_child:    "com.guardian.child"         # App Enfant
+category:        "Outils / Famille"
+content_rating:  "PEGI 3 (pour les parents)"
+price:           "Gratuit (achats intégrés)"
+
+## Titre de l'application (50 car. max)
+title_fr: "Guardian – Contrôle Parental IA"
+title_en: "Guardian – Smart Parental Control"
+title_es: "Guardian – Control Parental IA"
+
+## Description courte (80 car. max)
+short_desc_fr: |
+  Protégez vos enfants avec l'IA Guardian. Impossible à contourner, simple à utiliser.
+
+short_desc_en: |
+  Protect your children with Guardian AI. Impossible to bypass, simple to use.
+
+## Description longue (4000 car. max)
+long_desc_fr: |
+  🛡️ GUARDIAN — Le contrôle parental qui protège vraiment
+
+  Guardian est la seule application de contrôle parental qui combine une sécurité Android infranchissable avec une intelligence artificielle bienveillante. Fini les restrictions frustrantes : Guardian aide votre enfant à comprendre les règles et à les accepter.
+
+  ✅ SÉCURITÉ RÉELLE, PAS UN GADGET
+  • Empêche l'installation de nouveaux navigateurs pour contourner les filtres
+  • VPN local : filtre TOUS les sites, impossible à désactiver
+  • Service d'accessibilité : bloque les apps interdites instantanément
+  • Démarre automatiquement au redémarrage de l'appareil
+  • Chiffrement AES-256 : données sécurisées même si rooté
+
+  ⏰ CONTRÔLE DU TEMPS D'ÉCRAN
+  • Quotas quotidiens par enfant (différents semaine/week-end)
+  • Heure du coucher automatique
+  • Mode école : blocage total pendant les heures de classe
+  • Réglages rapides en 1 clic depuis l'app parent
+
+  📝 NOTES SCOLAIRES → AJUSTEMENT AUTOMATIQUE
+  • Saisissez une note → le temps s'ajuste automatiquement
+  • Connectez Pronote ou EcoleDirecte pour une sync automatique
+  • Bonne note = bonus de temps. Mauvaise note = temps réduit.
+
+  🤖 L'IA GUARDIAN (Plan Premium)
+  • Votre enfant peut demander POURQUOI son temps est réduit
+  • L'IA explique avec bienveillance et propose des solutions
+  • Quiz adaptatifs : réussir = gagner du temps bonus
+  • Détecte si votre enfant est en difficulté et vous alerte
+  • Journal de bord hebdomadaire personnalisé
+
+  📍 GÉOFENCING
+  • Zones intelligentes (maison, école, grands-parents…)
+  • Alertes automatiques à chaque arrivée/départ
+  • Mode école s'active automatiquement à l'école
+
+  👨‍👩‍👧 MULTI-PARENT
+  • Invitez le 2ème parent, les grands-parents, la nounou
+  • Droits différenciés : admin, parent, gardien, observateur
+
+  🏆 GAMIFICATION
+  • Badges, points, niveaux, streaks pour motiver les enfants
+  • L'IA félicite les efforts et encourage les progrès
+
+  💎 PLANS
+  • Gratuit : 1 enfant, contrôles basiques
+  • Family (4,99€/mois) : 3 enfants, multi-parent, géofencing
+  • Premium (9,99€/mois) : tout + IA Guardian complète
+
+  Essai gratuit 14 jours sur les plans payants. Sans engagement.
+
+  ---
+  Guardian respecte strictement la vie privée de votre famille.
+  Données chiffrées. Conformité RGPD totale. Aucune publicité.
+
+long_desc_en: |
+  🛡️ GUARDIAN — The Parental Control That Actually Works
+
+  Guardian is the only parental control app that combines impenetrable Android security with a caring AI assistant. No more frustrating restrictions: Guardian helps your child understand and accept the rules.
+
+  ✅ REAL SECURITY, NOT JUST AN APP
+  • Prevents installing alternative browsers to bypass filters
+  • Local VPN: filters ALL websites, impossible to disable
+  • Accessibility service: blocks forbidden apps instantly
+  • Auto-restarts on device reboot
+  • AES-256 encryption: data secured even if rooted
+
+  🤖 GUARDIAN AI (Premium Plan)
+  • Your child can ask WHY their screen time was reduced
+  • AI explains kindly and proposes solutions
+  • Adaptive quizzes: pass to earn bonus time
+  • Detects if your child is struggling and alerts you
+
+  Free 14-day trial on paid plans. No commitment.
+
+## Mots-clés ASO (Play Store optimized)
+keywords_fr:
+  - contrôle parental
+  - temps écran enfant
+  - bloquer applications
+  - filtre internet enfant
+  - parentalité numérique
+  - screen time
+  - sécurité enfant android
+  - intelligence artificielle parent
+  - pronote notes automatiques
+  - géofencing famille
+
+keywords_en:
+  - parental control android
+  - screen time management
+  - child safety app
+  - block apps kids
+  - internet filter children
+  - family screen time
+  - kids digital wellbeing
+  - AI parental control
+
+# ══════════════════════════════════════════════════════════════
+# ASSETS REQUIS (à créer)
+# ══════════════════════════════════════════════════════════════
+
+assets:
+  # Icône application
+  icon:
+    - size: "512x512"   format: "PNG"  path: "assets/icon_512.png"
+    - size: "192x192"   format: "PNG"  path: "assets/icon_192.png"  # Adaptive icon foreground
+    - size: "108x108"   format: "PNG"  path: "assets/icon_108.png"  # Legacy
+
+  # Feature Graphic (Play Store banner)
+  feature_graphic:
+    size: "1024x500"
+    format: "PNG ou JPG"
+    path: "assets/feature_graphic.png"
+    description: |
+      Design: fond dégradé sombre (#0a0a12 → #1a1a2e),
+      Logo Guardian centré avec effet glow violet,
+      Tagline: "Le contrôle parental qui protège vraiment"
+      Quelques UI mockups en flottant
+
+  # Screenshots (minimum 2, maximum 8)
+  screenshots_parent:
+    format: "PNG"
+    dimensions: "1080x1920 (portrait)"
+    files:
+      - name: "01_dashboard.png"
+        desc: "Tableau de bord parent avec barres de quota en temps réel"
+      - name: "02_quick_actions.png"
+        desc: "Actions rapides : -30min, +30min, Mode devoirs, Bloquer"
+      - name: "03_child_profile.png"
+        desc: "Profil enfant avec anneau SVG animé et stats"
+      - name: "04_grades.png"
+        desc: "Saisie de note avec ajustement automatique du temps"
+      - name: "05_geofencing.png"
+        desc: "Zones GPS avec types : Maison, École, Zone restreinte"
+      - name: "06_subscription.png"
+        desc: "Plans Free / Family / Premium avec comparatif"
+      - name: "07_multi_parent.png"
+        desc: "Inviter un 2ème parent avec droits différenciés"
+      - name: "08_notifications.png"
+        desc: "Alertes en temps réel : quota, tentative contournement"
+
+  screenshots_child:
+    format: "PNG"
+    dimensions: "1080x1920 (portrait)"
+    files:
+      - name: "01_home.png"
+        desc: "Launcher sécurisé avec quota ring et apps autorisées"
+      - name: "02_ai_chat.png"
+        desc: "Chat avec Guardian IA : explication des règles"
+      - name: "03_quiz.png"
+        desc: "Quiz adaptatif pour gagner du temps bonus"
+      - name: "04_rewards.png"
+        desc: "Écran gamification : badges, niveau, streak"
+      - name: "05_blocking.png"
+        desc: "Overlay de blocage animé avec proposition de quiz"
+
+  # Vidéo promotionnelle (optionnel mais fortement recommandé)
+  promo_video:
+    duration: "30-120 secondes"
+    format: "MP4, 1080p"
+    script: |
+      0-5s  : Logo Guardian avec animation shield
+      5-15s : Parents configurent des règles en quelques clics
+      15-25s: Enfant parle à l'IA Guardian, fait un quiz, gagne du temps
+      25-30s: Tagline + CTA "Télécharger gratuitement"
+
+# ══════════════════════════════════════════════════════════════
+# POLITIQUE DE CONFIDENTIALITÉ (requis pour les apps enfants)
+# ══════════════════════════════════════════════════════════════
+privacy_policy_url: "https://guardian-app.com/privacy"
+data_safety:
+  data_collected:
+    - type: "Email (parent)"        purpose: "Authentification"        shared: false
+    - type: "Prénom enfant"         purpose: "Personnalisation IA"     shared: false
+    - type: "Notes scolaires"       purpose: "Ajustement temps écran"  shared: false
+    - type: "Localisation (enfant)" purpose: "Géofencing"              shared: false
+    - type: "Activité apps"         purpose: "Rapports parents"        shared: false
+  encryption: "AES-256-GCM via Android Keystore"
+  gdpr_compliant: true
+  coppa_compliant: true  # Children's Online Privacy Protection Act
+  child_directed: false  # L'app parent n'est pas destinée aux enfants
+
+# ══════════════════════════════════════════════════════════════
+# CONFIGURATION FASTLANE (déploiement automatisé)
+# ══════════════════════════════════════════════════════════════
+# Gemfile :
+# gem "fastlane"
+# gem "supply"    # Google Play deployment
+#
+# Fastfile :
+# lane :deploy_parent do
+#   gradle(task: "bundle", build_type: "Release", project_dir: "mobile-parent/android")
+#   upload_to_play_store(
+#     track: "internal",
+#     aab: "mobile-parent/android/app/build/outputs/bundle/release/app-release.aab",
+#     package_name: "com.guardian.parent",
+#     json_key: "fastlane/play-store-key.json",
+#     metadata_path: "fastlane/metadata/android"
+#   )
+# end
+
+# ══════════════════════════════════════════════════════════════
+# SIGNING CONFIG (android/app/build.gradle)
+# ══════════════════════════════════════════════════════════════
+# signingConfigs {
+#   release {
+#     storeFile file(System.getenv("KEYSTORE_PATH") ?: "guardian-release.keystore")
+#     storePassword System.getenv("KEYSTORE_PASSWORD")
+#     keyAlias System.getenv("KEY_ALIAS")
+#     keyPassword System.getenv("KEY_PASSWORD")
+#   }
+# }
+# buildTypes {
+#   release {
+#     signingConfig signingConfigs.release
+#     minifyEnabled true
+#     proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+#   }
+# }

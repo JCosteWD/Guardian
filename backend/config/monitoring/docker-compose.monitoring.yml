@@ -1,0 +1,128 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# GUARDIAN – Stack de monitoring (Prometheus + Grafana + Alertmanager)
+# ══════════════════════════════════════════════════════════════════════════════
+# Usage:
+#   docker compose -f docker/docker-compose.prod.yml \
+#                   -f monitoring/docker-compose.monitoring.yml up -d
+
+version: '3.9'
+
+networks:
+  guardian_internal:
+    external: true
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+
+services:
+
+  # ── PROMETHEUS ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - guardian_internal
+      - monitoring
+    expose:
+      - "9090"
+
+  # ── GRAFANA ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "https://guardian-app.com:3001"
+    secrets:
+      - grafana_password
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana-dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+  # ── ALERTMANAGER ───────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:latest
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - monitoring
+    expose:
+      - "9093"
+
+  # ── NODE EXPORTER (métriques serveur: CPU, RAM, disque) ──────────────────────
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - monitoring
+    expose:
+      - "9100"
+
+  # ── POSTGRES EXPORTER ──────────────────────────────────────────────────────
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: "postgres:5432/guardian?sslmode=disable"
+      DATA_SOURCE_USER: guardian_user
+      DATA_SOURCE_PASS_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    networks:
+      - guardian_internal
+      - monitoring
+    expose:
+      - "9187"
+
+  # ── REDIS EXPORTER ─────────────────────────────────────────────────────────
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    secrets:
+      - redis_password
+    networks:
+      - guardian_internal
+      - monitoring
+    expose:
+      - "9121"
+
+secrets:
+  db_password:
+    file: ../secrets/db_password.txt
+  redis_password:
+    file: ../secrets/redis_password.txt
+  grafana_password:
+    file: ../secrets/grafana_password.txt
