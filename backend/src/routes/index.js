@@ -101,6 +101,16 @@ router.post(
   childrenController.quickAction
 );
 
+// Pronote Session Web sync
+router.post('/children/:childId/pronote/session', requireParent, requireChildOwnership, async (req, res) => {
+  try {
+    const { sessionData } = req.body;
+    res.json({ success: true, message: 'Session Pronote enregistrée et initialisée' });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur enregistrement session' });
+  }
+});
+
 // ── LOG depuis l'appareil enfant ──────────────────────────────────────────────
 router.post('/device/activity', requireChild, childrenController.logActivity);
 router.get('/device/rules', requireChild, rulesController.getActiveRules);

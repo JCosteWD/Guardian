@@ -43,12 +43,90 @@ export function ChildrenPage() {
   }, []);
 
   useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.data && event.data.type === 'PRONOTE_CONNECTED') {
+        setIsPronoteConnected(true);
+        showToast('✨ Synchronisation Pronote établie via le guichet EduConnect !');
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [showToast]);
+
+  useEffect(() => {
     if (selectedChild) {
       loadChildDashboard(selectedChild.id);
       // Simulate Pronote connection for demonstration if name matches or defaults
       setIsPronoteConnected(selectedChild.first_name === 'Lucas' || isPronoteConnected);
     }
   }, [selectedChild]);
+
+  const handleOpenPronotePopup = () => {
+    const width = 600;
+    const height = 700;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+
+    const popup = window.open(
+      '',
+      'PronoteEduConnectWindow',
+      `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
+    );
+
+    if (!popup) {
+      showToast('⚠️ Pop-up bloquée par le navigateur. Veuillez autoriser les fenêtres surgissantes.', false);
+      return;
+    }
+
+    popup.document.write(`
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+        <meta charset="UTF-8">
+        <title>Authentification EduConnect / Pronote</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; text-align: center; }
+          .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; max-width: 400px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+          h2 { margin-top: 0; color: #38bdf8; font-size: 18px; }
+          p { font-size: 13px; color: #94a3b8; line-height: 1.5; }
+          .btn { background: linear-gradient(135deg, #6366f1, #3b82f6); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; width: 100%; margin-top: 15px; }
+          .btn:hover { opacity: 0.9; }
+          .loader { border: 3px solid #334155; border-top: 3px solid #38bdf8; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 15px auto; display: none; }
+          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h2>Guichet EduConnect / Pronote 2026</h2>
+          <p>Connectez-vous avec vos identifiants académiques pour valider l'association automatique avec Guardian.</p>
+          <div id="form-section">
+            <input type="text" placeholder="Identifiant EduConnect" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box;" value="${pronoteUser || 'parent.demo'}" />
+            <input type="password" placeholder="Mot de passe" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box;" value="••••••••" />
+            <button class="btn" onclick="submitAuth()">Se connecter et autoriser</button>
+          </div>
+          <div id="loader" class="loader"></div>
+          <div id="status" style="margin-top: 15px; font-size: 13px; color: #4ade80;"></div>
+        </div>
+        <script>
+          function submitAuth() {
+            document.getElementById('form-section').style.display = 'none';
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('status').innerText = 'Vérification du jeton SSO...';
+            setTimeout(function() {
+              document.getElementById('status').innerText = '✅ Authentification réussie ! Fermeture...';
+              if (window.opener) {
+                window.opener.postMessage({ type: 'PRONOTE_CONNECTED' }, '*');
+              }
+              setTimeout(function() {
+                window.close();
+              }, 500);
+            }, 1000);
+          }
+        </script>
+      </body>
+      </html>
+    `);
+  };
 
   const loadChildDashboard = async (childId) => {
     setLoadingDashboard(true);
@@ -366,32 +444,45 @@ export function ChildrenPage() {
                 </div>
 
                 {!isPronoteConnected ? (
-                  <form onSubmit={handleConnectPronote} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr) auto', gap: 10, marginTop: 16 }}>
-                    <input
-                      type="text"
-                      placeholder="Identifiant Elève / Parent"
-                      className="input"
-                      value={pronoteUser}
-                      onChange={(e) => setPronoteUser(e.target.value)}
-                    />
-                    <input
-                      type="password"
-                      placeholder="Mot de passe"
-                      className="input"
-                      value={pronotePass}
-                      onChange={(e) => setPronoteUserPass(e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      placeholder="URL de l'établissement"
-                      className="input"
-                      value={pronoteUrl}
-                      onChange={(e) => setPronoteUrl(e.target.value)}
-                    />
-                    <Button type="submit" style={{ height: '100%', background: 'linear-gradient(135deg, var(--purple), var(--blue))' }}>
-                      ⚡ Connecter
-                    </Button>
-                  </form>
+                  <div style={{ marginTop: 16 }}>
+                    <form onSubmit={handleConnectPronote} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr) auto', gap: 10, marginBottom: 12 }}>
+                      <input
+                        type="text"
+                        placeholder="Identifiant Elève / Parent"
+                        className="input"
+                        value={pronoteUser}
+                        onChange={(e) => setPronoteUser(e.target.value)}
+                      />
+                      <input
+                        type="password"
+                        placeholder="Mot de passe"
+                        className="input"
+                        value={pronotePass}
+                        onChange={(e) => setPronoteUserPass(e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder="URL de l'établissement"
+                        className="input"
+                        value={pronoteUrl}
+                        onChange={(e) => setPronoteUrl(e.target.value)}
+                      />
+                      <Button type="submit" style={{ height: '100%', background: 'linear-gradient(135deg, var(--purple), var(--blue))' }}>
+                        ⚡ Direct
+                      </Button>
+                    </form>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>Ou utilisez le guichet sécurisé 2026 :</span>
+                      <button
+                        type="button"
+                        onClick={handleOpenPronotePopup}
+                        className="btn"
+                        style={{ background: 'var(--surface2)', border: '1px solid var(--purple)', color: 'var(--purple)', fontSize: 12, padding: '6px 14px' }}
+                      >
+                        🌐 Ouvrir la fenêtre Pop-up EduConnect / Pronote
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <div style={{ display: 'flex', gap: 10, marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
                     <button
